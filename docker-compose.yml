@@ -1,0 +1,160 @@
+services:
+  ocis:
+    image: ${OCIS_IMAGE:-owncloud/ocis:latest}
+    container_name: web_ocis
+    ports:
+      - 9200:9200
+    environment:
+      # OCIS
+      OCIS_URL: ${OCIS_URL:-https://host.docker.internal:9200}
+      OCIS_INSECURE: "${OCIS_INSECURE:-true}"
+      OCIS_LOG_LEVEL: ${OCIS_LOG_LEVEL:-error}
+      OCIS_LOG_PRETTY: "${OCIS_LOG_PRETTY:-true}"
+      OCIS_LOG_COLOR: "${OCIS_LOG_COLOR:-true}"
+      OCIS_SYSTEM_USER_ID: "${OCIS_SYSTEM_USER_ID:-some-system-user-id-000-000000000000}"
+      OCIS_ADMIN_USER_ID: "${OCIS_ADMIN_USER_ID:-some-admin-user-id-0000-000000000000}"
+      OCIS_SYSTEM_USER_API_KEY: "${OCIS_SYSTEM_USER_API_KEY:-some-system-user-machine-auth-api-key}"
+      OCIS_JWT_SECRET: "${OCIS_JWT_SECRET:-some-ocis-jwt-secret}"
+      OCIS_MACHINE_AUTH_API_KEY: "${OCIS_MACHINE_AUTH_API_KEY:-some-ocis-machine-auth-api-key}"
+      STORAGE_USERS_MOUNT_ID: "1284d238-aa92-42ce-bdc4-0b0000009157"
+      GATEWAY_STORAGE_USERS_MOUNT_ID: "1284d238-aa92-42ce-bdc4-0b0000009157"
+
+      # WEB
+      WEB_UI_CONFIG: ${WEB_UI_CONFIG:-/web/config.json}
+      WEB_ASSET_PATH: ${WEB_ASSET_PATH:-/web/dist}
+
+      #FRONTEND
+      FRONTEND_SEARCH_MIN_LENGTH: "2"
+      # IDM
+      IDM_CREATE_DEMO_USERS: "${DEMO_USERS:-true}"
+      IDM_ADMIN_PASSWORD: "${ADMIN_PASSWORD:-admin}" # override the random admin password from `ocis init`
+      IDM_SVC_PASSWORD: "${IDM_SVC_PASSWORD:-some-ldap-idm-password}"
+      IDM_REVASVC_PASSWORD: "${IDM_REVASVC_PASSWORD:-some-ldap-reva-password}"
+      IDM_IDPSVC_PASSWORD: "${IDM_IDPSVC_PASSWORD:-some-ldap-idp-password}"
+
+      # IDP
+      IDP_LDAP_BIND_PASSWORD: "${IDP_LDAP_BIND_PASSWORD:-some-ldap-idp-password}"
+
+      # STORAGE
+      STORAGE_HOME_DRIVER: ${STORAGE_HOME_DRIVER:-ocis}
+      STORAGE_USERS_DRIVER: ${STORAGE_USERS_DRIVER:-ocis}
+      STORAGE_TRANSFER_SECRET: "${STORAGE_TRANSFER_SECRET:-some-ocis-transfer-secret}"
+
+      # LDAP
+      GROUPS_LDAP_BIND_PASSWORD: "${GROUPS_LDAP_BIND_PASSWORD:-some-ldap-reva-password}"
+      USERS_LDAP_BIND_PASSWORD: "${USERS_LDAP_BIND_PASSWORD:-some-ldap-reva-password}"
+      AUTH_BASIC_LDAP_BIND_PASSWORD: "${AUTH_BASIC_LDAP_BIND_PASSWORD:-some-ldap-reva-password}"
+      GRAPH_LDAP_BIND_PASSWORD: "${GRAPH_LDAP_BIND_PASSWORD:-some-ldap-idm-password}"
+      LDAP_GROUP_SUBSTRING_FILTER_TYPE: "any"
+      LDAP_USER_SUBSTRING_FILTER_TYPE: "any"
+
+      # PROXY
+      PROXY_ENABLE_BASIC_AUTH: "${PROXY_ENABLE_BASIC_AUTH:-true}"
+    volumes:
+      - ./dev/docker/ocis.entrypoint.sh:/usr/bin/entrypoint
+      - ./dev/docker/ocis.idp.config.yaml:/etc/ocis/idp.yaml
+      - ./dev/docker/ocis-ca:/var/lib/ocis/proxy
+      - ./dist:/web/dist:ro
+      - ${OCIS_WEB_CONFIG:-./dev/docker/ocis.web.config.json}:/web/config.json:ro
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+    entrypoint: /usr/bin/entrypoint
+
+  oc10:
+    build:
+      dockerfile: oc10.Dockerfile
+      context: ./dev/docker
+      args:
+        OC10_IMAGE: ${OC10_IMAGE:-owncloud/server:latest}
+    container_name: web_oc10
+    ports:
+      - 8080:8080
+    environment:
+      OWNCLOUD_LOCKING_ENABLED: "false"
+      OWNCLOUD_TRUSTED_DOMAINS: "host.docker.internal"
+    volumes:
+      - ${OC10_WEB_CONFIG:-./dev/docker/oc10.web.config.json}:/mnt/data/config/config.json
+      - ${OC10_CONFIG:-./dev/docker/oc10.config.php}:/mnt/data/config/setup.config.php
+      - ./dev/docker/oc10.entrypoint.sh:/usr/bin/entrypoint
+      - ./packages/web-integration-oc10/appinfo:/mnt/data/apps/web/appinfo
+      - ./packages/web-integration-oc10/lib:/mnt/data/apps/web/lib
+      - ./dist/css:/mnt/data/apps/web/css
+      - ./dist/img:/mnt/data/apps/web/img
+      - ./dist/js:/mnt/data/apps/web/js/
+      - ./packages/web-integration-oc10/js/app.js:/mnt/data/apps/web/js/app.js
+      - ./dist/themes:/mnt/data/apps/web/themes
+      - ./dist/icons:/mnt/data/apps/web/icons
+      - ./dist/fonts:/mnt/data/apps/web/fonts
+      - ./dist/index.html:/mnt/data/apps/web/index.html
+      - ./dist/manifest.json:/mnt/data/apps/web/manifest.json
+      - ./dist/oidc-callback.html:/mnt/data/apps/web/oidc-callback.html
+      - ./dist/oidc-silent-redirect.html:/mnt/data/apps/web/oidc-silent-redirect.html
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+    entrypoint: /usr/bin/entrypoint
+
+  selenium:
+    build:
+      dockerfile: selenium.Dockerfile
+      context: ./dev/docker
+      args:
+        SELENIUM_IMAGE: ${SELENIUM_IMAGE:-selenium/standalone-chrome:104.0-20220812}
+    container_name: web_selenium
+    ports:
+      - 4444:4444
+      - 5900:5900
+    volumes:
+      - /dev/shm:/dev/shm
+      - uploads:/uploads:ro
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+    environment:
+      VNC_NO_PASSWORD: "true"
+
+  middleware-oc10:
+    image: owncloud/owncloud-test-middleware:latest
+    hostname: middleware
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+    ports:
+      - "3001:3001"
+    volumes:
+      - uploads:/uploads
+      - /var/tmp/ocis:/var/tmp/ocis
+    environment:
+      MIDDLEWARE_PORT: 3001
+      MIDDLEWARE_HOST: "0.0.0.0"
+      RUN_ON_OCIS: 'false'
+      BACKEND_HOST: "http://host.docker.internal:8080"
+      REMOTE_UPLOAD_DIR: "/uploads"
+
+  middleware-ocis:
+    image: owncloud/owncloud-test-middleware:latest
+    hostname: middleware
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+    ports:
+      - "3000:3000"
+    volumes:
+      - uploads:/uploads
+    environment:
+      MIDDLEWARE_PORT: 3000
+      MIDDLEWARE_HOST: "0.0.0.0"
+      RUN_ON_OCIS: 'true'
+      NODE_TLS_REJECT_UNAUTHORIZED: '0'
+      BACKEND_HOST: "https://host.docker.internal:9200"
+      REMOTE_UPLOAD_DIR: "/uploads"
+      TEST_WITH_GRAPH_API: "true"
+
+  vnc:
+    build:
+      dockerfile: vnc.Dockerfile
+      context: ./dev/docker
+    container_name: web_vnc
+    ports:
+      - 6080:6080
+    extra_hosts:
+      - host.docker.internal:${DOCKER_HOST:-host-gateway}
+
+volumes:
+  uploads:

@@ -1,0 +1,11 @@
+{
+    "name": "@ownclouders/babel-preset",
+    "version": "0.0.0",
+    "main": "index.js",
+    "exports": {
+        ".": "./index.js"
+    },
+    "dependencies": {
+        "@babel/helper-plugin-utils": "^7.16.7"
+    }
+}
